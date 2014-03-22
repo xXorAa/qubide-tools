@@ -1,5 +1,17 @@
 /*
+ * QUBIDE/QL-SD image tools
+ *
  * Copyright (c) 2014 Graeme Gregory
+ *
+ * Based in part on qltools which is
+ *
+ *       Copyright (c)1992 by Giuseppe Zanetti
+ *
+ *       Giuseppe Zanetti
+ *       via Vergani, 11 - 35031 Abano Terme (Padova) ITALY
+ *       e-mail: beppe@sabrina.dei.unipd.it
+ *
+ *       This is copyrighted software, but freely distributable.
  */
 
 #include <stdio.h>
