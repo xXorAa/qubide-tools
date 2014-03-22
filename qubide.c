@@ -25,6 +25,8 @@
 
 #include "qubide.h"
 
+static time_t timeadjust;
+
 uint16_t swapword(uint16_t val)
 {
     return (uint16_t) (val << 8) + (val >> 8);
@@ -35,8 +37,6 @@ uint32_t swaplong (uint32_t val)
     return (uint32_t) (((uint32_t) swapword (val & 0xFFFF) << 16) |
                     (uint32_t) swapword (val >> 16));
 }
-
-static time_t timeadjust;
 
 int file_num(struct qdisk *disk, int block)
 {
