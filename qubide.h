@@ -20,12 +20,12 @@
 #include <stdint.h>
 
 #if defined __GNUC__
-#define PACKED  __attribute__ ((packed))
+#define PACKED  __attribute__((gcc_struct, packed))
 #else
 #define PACKED
 #endif
 
-struct DISK_HEADER {
+typedef struct PACKED {
 	uint32_t	id;
 	char		med_name[10];
 	uint16_t	rand_num;
@@ -43,24 +43,24 @@ struct DISK_HEADER {
 	uint8_t		spare2[3];
 	uint8_t		num_heads;
 	uint8_t		num_parts;
-	uint8_t		spare3[3];
+	uint8_t		spare3[4];
 	uint16_t	part_1_q;
 	uint16_t	part_1_t;
-};
+} DISK_HEADER;
 
-struct DIR_ENTRY {
+typedef struct PACKED {
 	uint32_t	file_len;
 	uint8_t		file_mode;
 	uint8_t		file_type;
-	uint32_t	data_space PACKED;
-	uint8_t		spare[4];
+	uint32_t	data_space;
+	uint32_t	spare;
 	uint16_t	fn_len;
 	char		filename[36];
-	uint32_t	date_update PACKED;
+	uint32_t	date_update;
 	uint16_t	version;
 	uint16_t	fileno;
 	uint32_t	date_backup;
-};
+} DIR_ENTRY;
 
 #define Q_SSIZE		512
 #define DIR_ENTRY_SIZE	0x40

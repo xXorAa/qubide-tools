@@ -37,7 +37,7 @@ uint32_t swaplong (uint32_t val)
 }
 
 static uint8_t *g_header_buffer[Q_SSIZE];
-static struct DISK_HEADER *g_header=(struct DISK_HEADER *)g_header_buffer;
+static DISK_HEADER *g_header=(DISK_HEADER *)g_header_buffer;
 
 static int g_num_map_blocks;
 static int g_sec_per_block;
@@ -109,7 +109,7 @@ int find_file(int file_no)
 	return cur_file_block;
 }
 
-int print_entry (struct DIR_ENTRY *entry, int fnum, int flag)
+int print_entry (DIR_ENTRY *entry, int fnum, int flag)
 {
 	short j,k;
 	int32_t flen;
@@ -195,7 +195,7 @@ void list_directory(int flag)
 	int dir_size, file_len, file_mode;
 	int name_len, file_type, file_num;
 	int data_space, block_num;
-	struct DIR_ENTRY *dir_entry;
+	DIR_ENTRY *dir_entry;
 	uint8_t *block;
 	char filename[37];
 	int i, j;
@@ -211,11 +211,11 @@ void list_directory(int flag)
 
 		fread(block, g_sec_per_block, Q_SSIZE, image);
 
-		dir_entry = (struct DIR_ENTRY *)block;
+		dir_entry = (DIR_ENTRY *)block;
 		dir_size = swaplong(dir_entry->file_len);
 
 		for(i = DIR_ENTRY_SIZE; i < dir_size ; i += DIR_ENTRY_SIZE) {
-			dir_entry = (struct DIR_ENTRY *)(block + i);
+			dir_entry = (DIR_ENTRY *)(block + i);
 
 			print_entry(dir_entry, 0, flag);
 		}
