@@ -36,34 +36,22 @@ uint32_t swaplong (uint32_t val)
                     (uint32_t) swapword (val >> 16));
 }
 
-static uint8_t *g_header_buffer[Q_SSIZE];
-static DISK_HEADER *g_header=(DISK_HEADER *)g_header_buffer;
-
-static int g_num_map_blocks;
-static int g_sec_per_block;
-static int g_total_blocks;
-static int g_free_blocks;
-
-static uint8_t *g_map;
-
-static FILE *image;
-
 static time_t timeadjust;
 
-int file_num(int block)
+int file_num(struct qdisk *disk, int block)
 {
 	uint16_t fn;
 
-	fn = *(uint16_t *)(g_map + 0x100 + (block * 4));
+	fn = *(uint16_t *)(disk->map + 0x100 + (block * 4));
 
 	return swapword(fn);	
 }
 
-int file_block(int block)
+int file_block(struct qdisk *disk, int block)
 {
 	uint16_t bl;
 
-	bl = *(uint16_t *)(g_map + 0x102 + (block * 4));
+	bl = *(uint16_t *)(disk->map + 0x102 + (block * 4));
 
 	return swapword(bl);
 }
@@ -77,7 +65,7 @@ time_t GetTimeZone(void)
 	return  -60 * tz.tz_minuteswest;
 }
 
-int find_file(int file_no, struct qfile *file)
+int find_file(struct qdisk *disk, int file_no, struct qfile *file)
 {
 	int i, fn, bl;
 
@@ -85,9 +73,9 @@ int find_file(int file_no, struct qfile *file)
 	 * Go through the blocklist and build an array of blocks belonging
 	 * to the file searched for.
 	 */
-	for (i = 0; i < g_total_blocks; i++) {
-		bl = file_block(i);
-		fn = file_num(i);
+	for (i = 0; i < disk->total_blocks; i++) {
+		bl = file_block(disk, i);
+		fn = file_num(disk, i);
 		
 		if (file_no == fn) {
 			file->blocks[bl] = i;
@@ -184,7 +172,7 @@ int print_entry (DIR_ENTRY *entry, int fnum, int flag)
 	return 0;
 }
 
-void list_directory(int flag, struct qfile *file)
+void list_directory(struct qdisk *disk, int flag, struct qfile *file)
 {
 	int dir_size, file_len, file_mode;
 	int name_len, file_type, file_num;
@@ -194,17 +182,19 @@ void list_directory(int flag, struct qfile *file)
 	char filename[37];
 	int i, j;
 
-	block = malloc(g_sec_per_block * Q_SSIZE);
+	block = malloc(disk->sec_per_block * Q_SSIZE);
 
 	if (!flag) {
-		printf("%.10s\n", g_header->med_name);
-		printf ("%i/%i blocks.\n\n", g_free_blocks, g_total_blocks);
+		printf("%.10s\n", disk->header->med_name);
+		printf ("%i/%i blocks.\n\n", disk->free_blocks,
+				disk->total_blocks);
 	}
 	for (j = 0; j < file->no_blocks; j++) {
 		block_num = file->blocks[j];
 
-		fseek(image, 0, g_sec_per_block * Q_SSIZE * block_num);
-		fread(block, g_sec_per_block, Q_SSIZE, image);
+		fseek(disk->image, 0, disk->sec_per_block * Q_SSIZE
+				* block_num);
+		fread(block, disk->sec_per_block, Q_SSIZE, disk->image);
 
 		dir_entry = (DIR_ENTRY *)block;
 		dir_size = swaplong(dir_entry->file_len);
@@ -219,21 +209,21 @@ void list_directory(int flag, struct qfile *file)
 	free(block);
 }
 
-void list_directory_cmd(flag)
+void list_directory_cmd(struct qdisk *disk, int flag)
 {
 	int blks;
 	struct qfile *file;
 
 	file = calloc(1, sizeof(*file));
 
-	blks = find_file(0, file);
+	blks = find_file(disk, 0, file);
 
 	if (!blks) {
 		printf("Failed to find root directory in this file\n");
 		return;
 	}
 
-	list_directory(flag, file);
+	list_directory(disk, flag, file);
 
 	free(file);
 }
@@ -286,12 +276,20 @@ void usage(void)
 int main(int argc, char **argv)
 {
 	struct qopts *qopts;
+	struct qdisk *disk;
 	int opt, err;
-
+	
 	qopts = calloc(1, sizeof(*qopts));
 	if (!qopts) {
 		printf("Failed to allocate options\n");
 		return -ENOMEM;
+	}
+
+	disk = calloc(1, sizeof(*disk));
+	if (!disk) {
+		printf("Failed to allocate disk\n");
+		err = -ENOMEM;
+		goto error1;
 	}
 
 	while((opt = getopt(argc, argv, options)) != EOF) {
@@ -336,41 +334,45 @@ int main(int argc, char **argv)
 		return -EINVAL;
 	}
 
-	image = fopen(qopts->image_name, "rw");
-	if (!image) {
+	disk->image = fopen(qopts->image_name, "rw");
+	if (!disk->image) {
 		perror("Failed to open file");
 		err = errno;
-		goto error1;
+		goto error2;
 	}
 
 	/* Read the info block so we can store some essential parameters */
-	fread(g_header_buffer, Q_SSIZE, 1, image);
+	fread(disk->header_buffer, Q_SSIZE, 1, disk->image);
+	disk->header = (DISK_HEADER *)disk->header_buffer;
 
-	g_total_blocks = swapword(g_header->tot_blks);
-	g_free_blocks = swapword(g_header->fre_blks);
-	g_sec_per_block = swapword(g_header->sec_blk);
-	g_num_map_blocks = swapword(g_header->part_1_q);
+	disk->total_blocks = swapword(disk->header->tot_blks);
+	disk->free_blocks = swapword(disk->header->fre_blks);
+	disk->sec_per_block = swapword(disk->header->sec_blk);
+	disk->num_map_blocks = swapword(disk->header->part_1_q);
 
 	/* Allocate and read the block map */
-	g_map = malloc(g_sec_per_block * g_num_map_blocks * Q_SSIZE);
+	disk->map = malloc(disk->sec_per_block * disk->num_map_blocks * Q_SSIZE);
 
-	fseek(image, 0, 0);
-	fread(g_map, g_sec_per_block * g_num_map_blocks, Q_SSIZE, image);
+	fseek(disk->image, 0, 0);
+	fread(disk->map, disk->sec_per_block * disk->num_map_blocks, Q_SSIZE,
+			disk->image);
 
 	timeadjust = GetTimeZone ();
 
 	switch(qopts->command) {
 	case QUB_CMD_LONGDIR:
-		list_directory_cmd(0);
+		list_directory_cmd(disk, 0);
 		break;
 	case QUB_CMD_SHORTDIR:
-		list_directory_cmd(1);
+		list_directory_cmd(disk, 1);
 		break;
 	};
 
 	/* clean up ready to leave */
-	free(g_map);
-	fclose(image);
+	free(disk->map);
+	fclose(disk->image);
+error2:
+	free(disk);
 error1:
 	free(qopts);
 	return err;

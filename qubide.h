@@ -72,6 +72,20 @@ struct qopts {
 	int command;
 };
 
+struct qdisk {
+	FILE *image;
+
+	uint8_t header_buffer[Q_SSIZE];
+	DISK_HEADER *header;
+
+	int num_map_blocks;
+	int sec_per_block;
+	int total_blocks;
+	int free_blocks;
+
+	uint8_t *map;
+};
+
 struct qfile {
 	int no_blocks;
 	int blocks[1024];
