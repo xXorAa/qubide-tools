@@ -48,9 +48,6 @@ static uint8_t *g_map;
 
 static FILE *image;
 
-static uint8_t g_cur_file[1024];
-static uint8_t g_cur_file_blocks;
-
 static time_t timeadjust;
 
 int file_num(int block)
@@ -80,10 +77,9 @@ time_t GetTimeZone(void)
 	return  -60 * tz.tz_minuteswest;
 }
 
-int find_file(int file_no)
+int find_file(int file_no, struct qfile *file)
 {
 	int i, fn, bl;
-	int cur_file_block = 0;
 
 	/*
 	 * Go through the blocklist and build an array of blocks belonging
@@ -94,19 +90,17 @@ int find_file(int file_no)
 		fn = file_num(i);
 		
 		if (file_no == fn) {
-			g_cur_file[bl] = i;
+			file->blocks[bl] = i;
 			/*
 			 * keep track of the maximum block number we find
 			 * in theory there should be no holes in the file
 			 */
-			if (cur_file_block <= bl)
-				cur_file_block = bl + 1;
+			if (file->no_blocks <= bl)
+				file->no_blocks = bl + 1;
 		}
 	}
 
-	g_cur_file_blocks = cur_file_block;
-
-	return cur_file_block;
+	return file->no_blocks;
 }
 
 int print_entry (DIR_ENTRY *entry, int fnum, int flag)
@@ -190,7 +184,7 @@ int print_entry (DIR_ENTRY *entry, int fnum, int flag)
 	return 0;
 }
 
-void list_directory(int flag)
+void list_directory(int flag, struct qfile *file)
 {
 	int dir_size, file_len, file_mode;
 	int name_len, file_type, file_num;
@@ -206,9 +200,10 @@ void list_directory(int flag)
 		printf("%.10s\n", g_header->med_name);
 		printf ("%i/%i blocks.\n\n", g_free_blocks, g_total_blocks);
 	}
-	for (j = 0; j < g_cur_file_blocks; j++) {
-		block_num = g_cur_file[j];
+	for (j = 0; j < file->no_blocks; j++) {
+		block_num = file->blocks[j];
 
+		fseek(image, 0, g_sec_per_block * Q_SSIZE * block_num);
 		fread(block, g_sec_per_block, Q_SSIZE, image);
 
 		dir_entry = (DIR_ENTRY *)block;
@@ -227,15 +222,20 @@ void list_directory(int flag)
 void list_directory_cmd(flag)
 {
 	int blks;
+	struct qfile *file;
 
-	blks = find_file(0);
+	file = calloc(1, sizeof(*file));
+
+	blks = find_file(0, file);
 
 	if (!blks) {
 		printf("Failed to find root directory in this file\n");
 		return;
 	}
 
-	list_directory(flag);
+	list_directory(flag, file);
+
+	free(file);
 }
 
 void device_info(void)

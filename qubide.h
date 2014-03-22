@@ -72,6 +72,12 @@ struct qopts {
 	int command;
 };
 
+struct qfile {
+	int no_blocks;
+	int blocks[1024];
+	DIR_ENTRY directory;
+};
+
 enum qcommands {
 	QUB_CMD_NONE,
 	QUB_CMD_LONGDIR,
