@@ -190,8 +190,8 @@ void list_directory(struct qdisk *disk, int flag, struct qfile *file)
 	for (j = 0; j < file->no_blocks; j++) {
 		block_num = file->blocks[j];
 
-		fseek(disk->image, 0, disk->sec_per_block * Q_SSIZE
-				* block_num);
+		fseek(disk->image, disk->sec_per_block * Q_SSIZE * block_num,
+				SEEK_SET);
 		fread(block, disk->sec_per_block, Q_SSIZE, disk->image);
 
 		dir_entry = (DIR_ENTRY *)block;
@@ -222,8 +222,8 @@ int search_directory(struct qdisk *disk, char *name, struct qfile *dir,
 	for (j = 0; j < dir->no_blocks; j++) {
 		block_num = dir->blocks[j];
 
-		fseek(disk->image, 0, disk->sec_per_block * Q_SSIZE
-				* block_num);
+		fseek(disk->image, disk->sec_per_block * Q_SSIZE * block_num,
+				SEEK_SET);
 		fread(block, disk->sec_per_block, Q_SSIZE, disk->image);
 
 		dir_entry = (DIR_ENTRY *)block;
@@ -485,7 +485,7 @@ int main(int argc, char **argv)
 	/* Allocate and read the block map */
 	disk->map = malloc(disk->sec_per_block * disk->num_map_blocks * Q_SSIZE);
 
-	fseek(disk->image, 0, 0);
+	fseek(disk->image, 0, SEEK_SET);
 	fread(disk->map, disk->sec_per_block * disk->num_map_blocks, Q_SSIZE,
 			disk->image);
 
