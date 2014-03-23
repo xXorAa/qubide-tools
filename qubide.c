@@ -174,12 +174,10 @@ int print_entry (DIR_ENTRY *entry, int fnum, int flag)
 
 void list_directory(struct qdisk *disk, int flag, struct qfile *file)
 {
-	int dir_size, file_len, file_mode;
-	int name_len, file_type, file_num;
-	int data_space, block_num;
+	int dir_size;
+	int block_num;
 	DIR_ENTRY *dir_entry;
 	uint8_t *block;
-	char filename[37];
 	int i, j;
 
 	block = malloc(disk->sec_per_block * Q_SSIZE);
@@ -209,6 +207,90 @@ void list_directory(struct qdisk *disk, int flag, struct qfile *file)
 	free(block);
 }
 
+int search_directory(struct qdisk *disk, char *name, struct qfile *dir,
+		struct qfile *file)
+{
+	int dir_size;
+	int fileno;
+	int block_num;
+	DIR_ENTRY *dir_entry;
+	uint8_t *block;
+	int i, j;
+
+	block = malloc(disk->sec_per_block * Q_SSIZE);
+
+	for (j = 0; j < dir->no_blocks; j++) {
+		block_num = dir->blocks[j];
+
+		fseek(disk->image, 0, disk->sec_per_block * Q_SSIZE
+				* block_num);
+		fread(block, disk->sec_per_block, Q_SSIZE, disk->image);
+
+		dir_entry = (DIR_ENTRY *)block;
+		dir_size = swaplong(dir_entry->file_len);
+
+		for(i = DIR_ENTRY_SIZE; i < dir_size ; i += DIR_ENTRY_SIZE) {
+			dir_entry = (DIR_ENTRY *)(block + i);
+			
+			if (strncmp(name, dir_entry->filename,
+						dir_entry->fn_len) == 0)
+			{
+				fileno = swapword(dir_entry->fileno);
+				memcpy(&file->directory, dir_entry,
+						sizeof(*dir_entry));
+				goto out;
+			}
+		}
+	}
+
+out:
+	free(block);
+	return fileno;
+}
+
+void dump_file(struct qdisk *disk, struct qfile *file)
+{
+	int file_len;
+	int blockno = 0, block_num;
+	uint8_t *block;
+
+	file_len = swaplong(file->directory.file_len);
+
+	block = malloc(disk->blocksize);
+
+	while(file_len > disk->blocksize ) {
+		block_num = file->blocks[blockno];
+
+		fseek(disk->image, disk->blocksize * block_num, SEEK_SET);
+		fread(block, disk->blocksize, 1, disk->image);	
+
+		if (blockno == 0) {
+			fwrite(block + DIR_ENTRY_SIZE,
+					disk->blocksize - DIR_ENTRY_SIZE, 1, 
+					stdout);
+		} else {
+			fwrite(block, disk->blocksize, 1, stdout);
+		}
+
+		file_len -= disk->blocksize;
+		blockno++;
+	}
+
+	if (file_len) {
+		block_num = file->blocks[blockno];
+
+		fseek(disk->image, disk->blocksize * block_num, SEEK_SET);
+		fread(block, disk->blocksize, 1, disk->image);	
+
+		if (blockno == 0) {
+			fwrite(block + DIR_ENTRY_SIZE,
+					file_len - DIR_ENTRY_SIZE, 1, stdout);
+		} else {
+			fwrite(block, file_len, 1, stdout);
+		}
+	}
+}
+
 void list_directory_cmd(struct qdisk *disk, int flag)
 {
 	int blks;
@@ -219,12 +301,43 @@ void list_directory_cmd(struct qdisk *disk, int flag)
 	blks = find_file(disk, 0, file);
 
 	if (!blks) {
-		printf("Failed to find root directory in this file\n");
+		printf("Failed to find root directory\n");
+		free(file);
 		return;
 	}
 
 	list_directory(disk, flag, file);
 
+	free(file);
+}
+
+void dump_file_cmd(struct qdisk *disk, char *name)
+{
+	int dir_blks, file_blks, fileno;
+	struct qfile *dir, *file;
+
+	dir = calloc(1, sizeof(*dir));
+	file = calloc(1, sizeof(*file));
+
+	dir_blks = find_file(disk, 0, dir);
+
+	if (!dir_blks) {
+		printf("Failed to find root directory\n");
+		free(dir);
+		return;
+	}
+
+	fileno = search_directory(disk, name, dir, file);
+
+	file_blks = find_file(disk, fileno, file);
+	if (!file_blks) {
+		printf("Failed to find file\n");
+		goto out;
+	}
+
+	dump_file(disk, file);
+out:
+	free(dir);
 	free(file);
 }
 
@@ -336,6 +449,10 @@ int main(int argc, char **argv)
 		case 'i':
 			qopts->command = QUB_CMD_INFO;
 			break;
+		case 'n':
+			qopts->command = QUB_CMD_DUMP;
+			qopts->cmd_arg = optarg;
+			break;
 		default:
 			usage();
 			return -EINVAL;
@@ -363,6 +480,8 @@ int main(int argc, char **argv)
 	disk->sec_per_block = swapword(disk->header->sec_blk);
 	disk->num_map_blocks = swapword(disk->header->part_1_q);
 
+	disk->blocksize = disk->sec_per_block * Q_SSIZE;
+
 	/* Allocate and read the block map */
 	disk->map = malloc(disk->sec_per_block * disk->num_map_blocks * Q_SSIZE);
 
@@ -378,6 +497,9 @@ int main(int argc, char **argv)
 		break;
 	case QUB_CMD_SHORTDIR:
 		list_directory_cmd(disk, 1);
+		break;
+	case QUB_CMD_DUMP:
+		dump_file_cmd(disk, qopts->cmd_arg);
 		break;
 	};
 

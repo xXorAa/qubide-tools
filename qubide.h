@@ -70,6 +70,7 @@ struct qopts {
 	int image;
 	char *image_name;
 	int command;
+	char *cmd_arg;
 };
 
 struct qdisk {
@@ -82,6 +83,7 @@ struct qdisk {
 	int sec_per_block;
 	int total_blocks;
 	int free_blocks;
+	int blocksize;
 
 	uint8_t *map;
 };
@@ -97,6 +99,7 @@ enum qcommands {
 	QUB_CMD_LONGDIR,
 	QUB_CMD_SHORTDIR,
 	QUB_CMD_INFO,
+	QUB_CMD_DUMP,
 };
 
 #endif /* _qubide.h */
