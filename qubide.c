@@ -262,7 +262,7 @@ void device_info(void)
 		*/
 }
 
-const char *options = "b:dsi";
+const char *options = "b:dsin:";
 
 void usage(void)
 {
@@ -271,6 +271,7 @@ void usage(void)
 	printf("  -d                         long directory listing\n");
 	printf("  -s                         short directory listing\n");
 	printf("  -i                         show device info\n");
+	printf("  -n                         dump file to stdout\n");
 }
 
 int main(int argc, char **argv)
@@ -279,6 +280,18 @@ int main(int argc, char **argv)
 	struct qdisk *disk;
 	int opt, err;
 	
+	if (sizeof(DIR_ENTRY) != 64) {
+		printf("Packing error DIR_ENTRY is %d bytes\n",
+				(int)sizeof(DIR_ENTRY));
+		return -1;
+	}
+
+	if (sizeof(DISK_HEADER) != 52) {
+		printf("Packing error DISK_HEADER is %d bytes\n",
+				(int)sizeof(DISK_HEADER));
+		return -1;
+	}
+
 	qopts = calloc(1, sizeof(*qopts));
 	if (!qopts) {
 		printf("Failed to allocate options\n");
