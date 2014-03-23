@@ -1,3 +1,3 @@
 qubide : qubide.c qubide.h
-	$(CC) -o qubide qubide.c
+	$(CC) -Wall -o qubide qubide.c
 
