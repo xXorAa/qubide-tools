@@ -65,6 +65,29 @@ time_t GetTimeZone(void)
 	return  -60 * tz.tz_minuteswest;
 }
 
+int read_disk(struct qdisk *disk, int position, int bytes, uint8_t *buffer)
+{
+	int err;
+
+	fseek(disk->image, position, SEEK_SET);
+	err = fread(buffer, 1, bytes, disk->image);
+	if (err != bytes) {
+		fprintf(stderr, "ERROR: read %d, expected %d\n", err, bytes);
+		return -1;
+	}
+
+	return 0;
+}
+
+int read_block(struct qdisk *disk, int block, uint8_t *buffer)
+{
+	int err;
+
+	err = read_disk(disk, disk->blocksize * block, disk->blocksize, buffer);
+
+	return err;
+}
+
 int find_file(struct qdisk *disk, int file_no, struct qfile *file)
 {
 	int i, fn, bl;
@@ -180,7 +203,7 @@ void list_directory(struct qdisk *disk, int flag, struct qfile *file)
 	uint8_t *block;
 	int i, j;
 
-	block = malloc(disk->sec_per_block * Q_SSIZE);
+	block = malloc(disk->blocksize);
 
 	if (!flag) {
 		printf("%.10s\n", disk->header->med_name);
@@ -190,9 +213,7 @@ void list_directory(struct qdisk *disk, int flag, struct qfile *file)
 	for (j = 0; j < file->no_blocks; j++) {
 		block_num = file->blocks[j];
 
-		fseek(disk->image, disk->sec_per_block * Q_SSIZE * block_num,
-				SEEK_SET);
-		fread(block, disk->sec_per_block, Q_SSIZE, disk->image);
+		read_block(disk, block_num, block);
 
 		dir_entry = (DIR_ENTRY *)block;
 		dir_size = swaplong(dir_entry->file_len);
@@ -211,20 +232,18 @@ int search_directory(struct qdisk *disk, char *name, struct qfile *dir,
 		struct qfile *file)
 {
 	int dir_size;
-	int fileno;
+	int fileno = -1;
 	int block_num;
 	DIR_ENTRY *dir_entry;
 	uint8_t *block;
 	int i, j;
 
-	block = malloc(disk->sec_per_block * Q_SSIZE);
+	block = malloc(disk->blocksize);
 
 	for (j = 0; j < dir->no_blocks; j++) {
 		block_num = dir->blocks[j];
 
-		fseek(disk->image, disk->sec_per_block * Q_SSIZE * block_num,
-				SEEK_SET);
-		fread(block, disk->sec_per_block, Q_SSIZE, disk->image);
+		read_block(disk, block_num, block);
 
 		dir_entry = (DIR_ENTRY *)block;
 		dir_size = swaplong(dir_entry->file_len);
@@ -261,8 +280,7 @@ void dump_file(struct qdisk *disk, struct qfile *file)
 	while(file_len > disk->blocksize ) {
 		block_num = file->blocks[blockno];
 
-		fseek(disk->image, disk->blocksize * block_num, SEEK_SET);
-		fread(block, disk->blocksize, 1, disk->image);	
+		read_block(disk, block_num, block);
 
 		if (blockno == 0) {
 			fwrite(block + DIR_ENTRY_SIZE,
@@ -279,8 +297,7 @@ void dump_file(struct qdisk *disk, struct qfile *file)
 	if (file_len) {
 		block_num = file->blocks[blockno];
 
-		fseek(disk->image, disk->blocksize * block_num, SEEK_SET);
-		fread(block, disk->blocksize, 1, disk->image);	
+		read_block(disk, block_num, block);
 
 		if (blockno == 0) {
 			fwrite(block + DIR_ENTRY_SIZE,
@@ -328,6 +345,10 @@ void dump_file_cmd(struct qdisk *disk, char *name)
 	}
 
 	fileno = search_directory(disk, name, dir, file);
+	if (fileno < 0) {
+		printf("Failed to find file\n");
+		goto out;
+	}
 
 	file_blks = find_file(disk, fileno, file);
 	if (!file_blks) {
@@ -391,7 +412,7 @@ int main(int argc, char **argv)
 {
 	struct qopts *qopts;
 	struct qdisk *disk;
-	int opt, err;
+	int opt, err = 0;
 	
 	if (sizeof(DIR_ENTRY) != 64) {
 		printf("Packing error DIR_ENTRY is %d bytes\n",
@@ -472,7 +493,8 @@ int main(int argc, char **argv)
 	}
 
 	/* Read the info block so we can store some essential parameters */
-	fread(disk->header_buffer, Q_SSIZE, 1, disk->image);
+	read_disk(disk, 0, Q_SSIZE, disk->header_buffer);
+
 	disk->header = (DISK_HEADER *)disk->header_buffer;
 
 	disk->total_blocks = swapword(disk->header->tot_blks);
@@ -483,11 +505,9 @@ int main(int argc, char **argv)
 	disk->blocksize = disk->sec_per_block * Q_SSIZE;
 
 	/* Allocate and read the block map */
-	disk->map = malloc(disk->sec_per_block * disk->num_map_blocks * Q_SSIZE);
+	disk->map = malloc(disk->blocksize * disk->num_map_blocks);
 
-	fseek(disk->image, 0, SEEK_SET);
-	fread(disk->map, disk->sec_per_block * disk->num_map_blocks, Q_SSIZE,
-			disk->image);
+	read_disk(disk, 0, disk->blocksize * disk->num_map_blocks, disk->map);
 
 	timeadjust = GetTimeZone ();
 
