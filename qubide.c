@@ -197,11 +197,11 @@ int print_entry (DIR_ENTRY *entry, int fnum, int flag)
 
 void list_directory(struct qdisk *disk, int flag, struct qfile *file)
 {
-	int dir_size;
-	int block_num;
-	DIR_ENTRY *dir_entry;
+	int block_lim, dir_size = 0;
+	int block_num, blockidx = 0, dir_idx = 0;
+	DIR_ENTRY *dir_entry = NULL;
 	uint8_t *block;
-	int i, j;
+	int i;
 
 	block = malloc(disk->blocksize);
 
@@ -210,19 +210,32 @@ void list_directory(struct qdisk *disk, int flag, struct qfile *file)
 		printf ("%i/%i blocks.\n\n", disk->free_blocks,
 				disk->total_blocks);
 	}
-	for (j = 0; j < file->no_blocks; j++) {
-		block_num = file->blocks[j];
 
-		read_block(disk, block_num, block);
+	while (blockidx < file->no_blocks) {
 
-		dir_entry = (DIR_ENTRY *)block;
-		dir_size = swaplong(dir_entry->file_len);
+		if (!(dir_idx % disk->blocksize)) {
+			block_num = file->blocks[blockidx];
+			read_block(disk, block_num, block);
+			dir_entry = (DIR_ENTRY *)block;
+		}
 
-		for(i = DIR_ENTRY_SIZE; i < dir_size ; i += DIR_ENTRY_SIZE) {
+		if (blockidx == 0) {
+			dir_size = swaplong(dir_entry->file_len);
+			dir_idx = DIR_ENTRY_SIZE;
+		} else {
+			dir_idx = 0;
+		}
+
+		block_lim = disk->blocksize * (blockidx + 1);
+
+		for(i = dir_idx; (i < dir_size) && (i < block_lim) ;
+				i += DIR_ENTRY_SIZE) {
 			dir_entry = (DIR_ENTRY *)(block + i);
 
 			print_entry(dir_entry, 0, flag);
 		}
+
+		blockidx++;
 	}
 
 	free(block);
