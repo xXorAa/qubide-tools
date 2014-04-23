@@ -222,17 +222,17 @@ void list_directory(struct qdisk *disk, int flag, struct qfile *file)
 		if (blockidx == 0) {
 			dir_size = swaplong(dir_entry->file_len);
 			dir_idx = DIR_ENTRY_SIZE;
-		} else {
-			dir_idx = 0;
 		}
 
 		block_lim = disk->blocksize * (blockidx + 1);
 
 		for(i = dir_idx; (i < dir_size) && (i < block_lim) ;
 				i += DIR_ENTRY_SIZE) {
-			dir_entry = (DIR_ENTRY *)(block + i);
+			dir_entry = (DIR_ENTRY *)(block + (i % disk->blocksize));
 
 			print_entry(dir_entry, 0, flag);
+
+			dir_idx += DIR_ENTRY_SIZE;
 		}
 
 		blockidx++;
