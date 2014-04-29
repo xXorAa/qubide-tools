@@ -21,22 +21,12 @@
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
+#include <arpa/inet.h>
 #include <sys/time.h>
 
 #include "qubide.h"
 
 static time_t timeadjust;
-
-uint16_t swapword(uint16_t val)
-{
-    return (uint16_t) (val << 8) + (val >> 8);
-}
-
-uint32_t swaplong (uint32_t val)
-{
-    return (uint32_t) (((uint32_t) swapword (val & 0xFFFF) << 16) |
-                    (uint32_t) swapword (val >> 16));
-}
 
 int file_num(struct qdisk *disk, int block)
 {
@@ -44,7 +34,7 @@ int file_num(struct qdisk *disk, int block)
 
 	fn = *(uint16_t *)(disk->map + 0x100 + (block * 4));
 
-	return swapword(fn);	
+	return ntohs(fn);	
 }
 
 int file_block(struct qdisk *disk, int block)
@@ -53,7 +43,7 @@ int file_block(struct qdisk *disk, int block)
 
 	bl = *(uint16_t *)(disk->map + 0x102 + (block * 4));
 
-	return swapword(bl);
+	return ntohs(bl);
 }
 
 time_t GetTimeZone(void)
@@ -146,12 +136,12 @@ int print_entry (DIR_ENTRY *entry, int fnum, int flag)
 	if (entry == NULL)
 		return 0;
 
-	flen = swaplong (entry->file_len);
+	flen = ntohl (entry->file_len);
 
-	if (flen + swapword (entry->fn_len) == 0)
+	if (flen + ntohs (entry->fn_len) == 0)
 		return 0;
 
-	j = k = swapword (entry->fn_len);
+	j = k = ntohs (entry->fn_len);
 	if (flag == 0)
 	{
 		k = 36;
@@ -197,18 +187,18 @@ int print_entry (DIR_ENTRY *entry, int fnum, int flag)
 		printf (" %7d", (int32_t) (flen - 64L));
 		{
 			struct tm *tm;
-			time_t t = swaplong (entry->date_update) - TIME_DIFF
+			time_t t = ntohl (entry->date_update) - TIME_DIFF
 								- timeadjust;
 
 			tm = localtime (&t);
 			printf (" %02d/%02d/%04d %02d:%02d:%02d v%-5u",
 					tm->tm_mday, tm->tm_mon + 1, tm->tm_year+1900,
 					tm->tm_hour, tm->tm_min, tm->tm_sec,
-					swapword (entry->version));
+					ntohs (entry->version));
 		}
 		if (entry->file_type == 1 && entry->data_space)
 		{
-			printf (" (%d)", swaplong (entry->data_space));
+			printf (" (%d)", ntohl (entry->data_space));
 		}
 		putc ('\n', stdout);
 	}
@@ -244,7 +234,7 @@ void list_directory(struct qdisk *disk, int flag, struct qfile *file)
 		}
 
 		if (blockidx == 0) {
-			dir_size = swaplong(dir_entry->file_len);
+			dir_size = ntohl(dir_entry->file_len);
 			dir_idx = DIR_ENTRY_SIZE;
 		}
 
@@ -283,7 +273,7 @@ int search_directory(struct qdisk *disk, char *name, struct qfile *dir,
 		read_block(disk, block_num, block);
 
 		dir_entry = (DIR_ENTRY *)block;
-		dir_size = swaplong(dir_entry->file_len);
+		dir_size = ntohl(dir_entry->file_len);
 
 		for(i = DIR_ENTRY_SIZE; i < dir_size ; i += DIR_ENTRY_SIZE) {
 			dir_entry = (DIR_ENTRY *)(block + i);
@@ -291,7 +281,7 @@ int search_directory(struct qdisk *disk, char *name, struct qfile *dir,
 			if (strncmp(name, dir_entry->filename,
 						dir_entry->fn_len) == 0)
 			{
-				fileno = swapword(dir_entry->fileno);
+				fileno = ntohs(dir_entry->fileno);
 				memcpy(&file->directory, dir_entry,
 						sizeof(*dir_entry));
 				goto out;
@@ -310,7 +300,7 @@ void dump_file(struct qdisk *disk, struct qfile *file)
 	int blockno = 0, block_num;
 	uint8_t *block;
 
-	file_len = swaplong(file->directory.file_len);
+	file_len = ntohl(file->directory.file_len);
 
 	block = malloc(disk->blocksize);
 
@@ -405,19 +395,19 @@ void disk_info(struct qdisk *disk)
 
 	snprintf(diskname, 11, "%s", disk->header->med_name);
 	printf("Medium Name %s\n", diskname);
-	printf("Rand Number %x\n", swapword(disk->header->rand_num));
-	printf("Number Updates %x\n", swaplong(disk->header->n_updts));
-	printf("Free Blocks %x\n", swapword(disk->header->fre_blks));
-	printf("Good Blocks %x\n", swapword(disk->header->gd_blks));
-	printf("Total Blocks %x\n", swapword(disk->header->tot_blks));
+	printf("Rand Number %x\n", ntohs(disk->header->rand_num));
+	printf("Number Updates %x\n", ntohl(disk->header->n_updts));
+	printf("Free Blocks %x\n", ntohs(disk->header->fre_blks));
+	printf("Good Blocks %x\n", ntohs(disk->header->gd_blks));
+	printf("Total Blocks %x\n", ntohs(disk->header->tot_blks));
 
 	printf("----------------\n");
 
-	printf("Sectors Per Track %x\n", swapword(disk->header->sec_trk));
-	printf("Sectors Per Cylinder %x\n", swapword(disk->header->sec_cyl));
-	printf("Number of Tracks %x\n", swapword(disk->header->n_tracks));
-	printf("Sectors Per Block %x\n", swapword(disk->header->sec_blk));
-	printf("Fat Size %x\n", swapword(disk->header->fat_size));
+	printf("Sectors Per Track %x\n", ntohs(disk->header->sec_trk));
+	printf("Sectors Per Cylinder %x\n", ntohs(disk->header->sec_cyl));
+	printf("Number of Tracks %x\n", ntohs(disk->header->n_tracks));
+	printf("Sectors Per Block %x\n", ntohs(disk->header->sec_blk));
+	printf("Fat Size %x\n", ntohs(disk->header->fat_size));
 	printf("Fat Type %x\n", disk->header->fat_type);
 
 	printf("----------------\n");
@@ -428,9 +418,9 @@ void disk_info(struct qdisk *disk)
 	printf("----------------\n");
 
 	printf("Part1: Number of Mapping blocks %x\n",
-			swapword(disk->header->part_1_q));
+			ntohs(disk->header->part_1_q));
 	printf("Part1: Start Track of Partition %x\n",
-			swapword(disk->header->part_1_t));
+			ntohs(disk->header->part_1_t));
 }
 
 const char *options = "b:dsin:";
@@ -541,10 +531,10 @@ int main(int argc, char **argv)
 
 	disk->header = (DISK_HEADER *)disk->header_buffer;
 
-	disk->total_blocks = swapword(disk->header->tot_blks);
-	disk->free_blocks = swapword(disk->header->fre_blks);
-	disk->sec_per_block = swapword(disk->header->sec_blk);
-	disk->num_map_blocks = swapword(disk->header->part_1_q);
+	disk->total_blocks = ntohs(disk->header->tot_blks);
+	disk->free_blocks = ntohs(disk->header->fre_blks);
+	disk->sec_per_block = ntohs(disk->header->sec_blk);
+	disk->num_map_blocks = ntohs(disk->header->part_1_q);
 
 	disk->blocksize = disk->sec_per_block * Q_SSIZE;
 
