@@ -69,6 +69,28 @@ int read_disk(struct qdisk *disk, int position, int bytes, uint8_t *buffer)
 {
 	int err;
 
+	if (disk->le) {
+		int i;
+		char *swapbuf;
+
+		swapbuf = malloc(bytes);
+
+		fseek(disk->image, position, SEEK_SET);
+		err = fread(swapbuf, 1, bytes, disk->image);
+		if (err != bytes) {
+			fprintf(stderr, "ERROR: read %d, expected %d\n", err, bytes);
+			return -1;
+		}
+
+		for(i = 0 ; i < bytes; i+= 2)
+		{
+			buffer[i + 1] = swapbuf[i];
+			buffer[i] = swapbuf[i + 1];
+		}
+
+		return 0;
+	}
+
 	fseek(disk->image, position, SEEK_SET);
 	err = fread(buffer, 1, bytes, disk->image);
 	if (err != bytes) {
@@ -375,38 +397,38 @@ out:
 	free(file);
 }
 
-void device_info(void)
+void disk_info(struct qdisk *disk)
 {
-	/*
-	snprintf(diskname, 11, "%s", header->med_name);
+	char diskname[12];
+
+	snprintf(diskname, 11, "%s", disk->header->med_name);
 	printf("Medium Name %s\n", diskname);
-	printf("Rand Number %x\n", swapword(header->rand_num));
-	printf("Number Updates %x\n", swaplong(header->n_updts));
-	printf("Free Blocks %x\n", swapword(header->fre_blks));
-	printf("Good Blocks %x\n", swapword(header->gd_blks));
-	printf("Total Blocks %x\n", swapword(header->tot_blks));
+	printf("Rand Number %x\n", swapword(disk->header->rand_num));
+	printf("Number Updates %x\n", swaplong(disk->header->n_updts));
+	printf("Free Blocks %x\n", swapword(disk->header->fre_blks));
+	printf("Good Blocks %x\n", swapword(disk->header->gd_blks));
+	printf("Total Blocks %x\n", swapword(disk->header->tot_blks));
 
 	printf("----------------\n");
 
-	printf("Sectors Per Track %x\n", swapword(header->sec_trk));
-	printf("Sectors Per Cylinder %x\n", swapword(header->sec_cyl));
-	printf("Number of Tracks %x\n", swapword(header->n_tracks));
-	printf("Sectors Per Block %x\n", swapword(header->sec_blk));
-	printf("Fat Size %x\n", swapword(header->fat_size));
-	printf("Fat Type %x\n", header->fat_type);
+	printf("Sectors Per Track %x\n", swapword(disk->header->sec_trk));
+	printf("Sectors Per Cylinder %x\n", swapword(disk->header->sec_cyl));
+	printf("Number of Tracks %x\n", swapword(disk->header->n_tracks));
+	printf("Sectors Per Block %x\n", swapword(disk->header->sec_blk));
+	printf("Fat Size %x\n", swapword(disk->header->fat_size));
+	printf("Fat Type %x\n", disk->header->fat_type);
 
 	printf("----------------\n");
 
-	printf("Number of Headers %x\n", header->num_heads);
-	printf("Number of Partitions %x\n", header->num_parts);
+	printf("Number of Headers %x\n", disk->header->num_heads);
+	printf("Number of Partitions %x\n", disk->header->num_parts);
 
 	printf("----------------\n");
 
 	printf("Part1: Number of Mapping blocks %x\n",
-			swapword(header->part_1_q));
+			swapword(disk->header->part_1_q));
 	printf("Part1: Start Track of Partition %x\n",
-			swapword(header->part_1_t));
-		*/
+			swapword(disk->header->part_1_t));
 }
 
 const char *options = "b:dsin:";
@@ -508,6 +530,13 @@ int main(int argc, char **argv)
 	/* Read the info block so we can store some essential parameters */
 	read_disk(disk, 0, Q_SSIZE, disk->header_buffer);
 
+	if (!strncmp((char *)disk->header_buffer, "LQ1W", 4)) {
+		disk->le = 1;
+		read_disk(disk, 0, Q_SSIZE, disk->header_buffer);
+	} else {
+		disk->le = 0;
+	}
+
 	disk->header = (DISK_HEADER *)disk->header_buffer;
 
 	disk->total_blocks = swapword(disk->header->tot_blks);
@@ -533,6 +562,9 @@ int main(int argc, char **argv)
 		break;
 	case QUB_CMD_DUMP:
 		dump_file_cmd(disk, qopts->cmd_arg);
+		break;
+	case QUB_CMD_INFO:
+		disk_info(disk);
 		break;
 	};
 

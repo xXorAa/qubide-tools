@@ -79,6 +79,7 @@ struct qdisk {
 	uint8_t header_buffer[Q_SSIZE];
 	DISK_HEADER *header;
 
+	int le;
 	int num_map_blocks;
 	int sec_per_block;
 	int total_blocks;
