@@ -88,6 +88,8 @@ int read_disk(struct qdisk *disk, int position, int bytes, uint8_t *buffer)
 			buffer[i] = swapbuf[i + 1];
 		}
 
+		free(swapbuf);
+
 		return 0;
 	}
 
